@@ -1,0 +1,13 @@
+{
+  "name": "finance_backend",
+  "private": true,
+  "scripts": {
+    "link": "node link_server.js",
+    "fetch": "node fetch_transactions.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "stripe": "^17.5.0"
+  }
+}
