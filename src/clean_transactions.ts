@@ -90,7 +90,9 @@ function main(): void {
     process.exit(1);
   }
 
-  const cleaned = transactions.map(clean);
+  const cleaned = transactions
+    .filter((tx) => (tx.amount as number) < 0)
+    .map(clean);
 
   // Write totals
   fs.writeFileSync(CLEAN_FILE, JSON.stringify(cleaned, null, 2));
