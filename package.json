@@ -2,12 +2,15 @@
   "name": "finance_backend",
   "private": true,
   "scripts": {
-    "link": "node link_server.js",
-    "fetch": "node fetch_transactions.js"
+    "link": "bun src/link_server.ts",
+    "fetch": "bun src/fetch_transactions.ts"
   },
   "dependencies": {
-    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "stripe": "^17.5.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "bun-types": "^1.2.0"
   }
 }
