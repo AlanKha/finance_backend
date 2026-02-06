@@ -3,13 +3,15 @@ const fs = require('fs');
 const path = require('path');
 const Stripe = require('stripe');
 
-const { stripe_secret_key } = process.env;
+const stripeEnv = process.env.stripe_env || 'sandbox';
+const stripe_secret_key = process.env[`stripe_${stripeEnv}_secret_key`];
 
 if (!stripe_secret_key) {
-  console.error('Missing stripe_secret_key in .env');
+  console.error(`Missing stripe_${stripeEnv}_secret_key in .env`);
   process.exit(1);
 }
 
+console.log(`Stripe mode: ${stripeEnv}`);
 const stripe = new Stripe(stripe_secret_key);
 const DATA_DIR = path.join(__dirname, 'data');
 const ACCOUNT_FILE = path.join(DATA_DIR, 'linked_account.json');
