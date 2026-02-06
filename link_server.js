@@ -24,7 +24,7 @@ function readData() {
   try {
     return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
   } catch {
-    return {};
+    return { accounts: [] };
   }
 }
 
@@ -65,7 +65,7 @@ app.post('/create-session', async (_req, res) => {
 
 app.post('/save-account', async (req, res) => {
   try {
-    const { accountId } = req.body;
+    const { accountId, institution, displayName, last4 } = req.body;
     if (!accountId) {
       return res.status(400).json({ error: 'accountId is required' });
     }
@@ -82,8 +82,18 @@ app.post('/save-account', async (req, res) => {
     }
 
     const data = readData();
-    data.fca_account_id = accountId;
-    writeData(data);
+
+    // Skip if this account is already linked
+    if (!data.accounts.some((a) => a.id === accountId)) {
+      data.accounts.push({
+        id: accountId,
+        institution: institution || null,
+        display_name: displayName || null,
+        last4: last4 || null,
+        linked_at: new Date().toISOString(),
+      });
+      writeData(data);
+    }
 
     res.json({ success: true, accountId });
   } catch (err) {

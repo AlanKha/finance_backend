@@ -11,93 +11,36 @@ if (!stripe_secret_key) {
 }
 
 const stripe = new Stripe(stripe_secret_key);
-const DATA_FILE = path.join(__dirname, 'data', 'linked_account.json');
+const DATA_DIR = path.join(__dirname, 'data');
+const ACCOUNT_FILE = path.join(DATA_DIR, 'linked_account.json');
+const TX_FILE = path.join(DATA_DIR, 'transactions.json');
 
-async function main() {
-  // Load linked account
-  let data;
+function loadLocal() {
   try {
-    data = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(TX_FILE, 'utf8'));
   } catch {
-    console.error('No linked account found. Run `npm run link` first.');
-    process.exit(1);
+    return [];
   }
+}
 
-  const { fca_account_id } = data;
-  if (!fca_account_id) {
-    console.error('No linked account found. Run `npm run link` first.');
-    process.exit(1);
-  }
+function saveLocal(transactions) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(TX_FILE, JSON.stringify(transactions, null, 2));
+}
 
-  // Step A: Refresh transactions
-  console.log('Refreshing transactions...');
-  try {
-    await stripe.financialConnections.accounts.refresh(fca_account_id, {
-      features: ['transactions'],
-    });
-  } catch (err) {
-    console.error('Refresh failed:', err.message);
-    process.exit(1);
-  }
+function accountLabel(acct) {
+  return [acct.institution, acct.display_name, acct.last4 ? `****${acct.last4}` : null]
+    .filter(Boolean)
+    .join(' ') || acct.id;
+}
 
-  // Step B: Poll for completion
-  console.log('Waiting for refresh to complete...');
-  const MAX_ATTEMPTS = 30;
-  for (let i = 0; i < MAX_ATTEMPTS; i++) {
-    try {
-      const account = await stripe.financialConnections.accounts.retrieve(fca_account_id);
-      const status = account.transaction_refresh?.status;
-
-      if (status === 'succeeded') {
-        console.log('Refresh complete.');
-        break;
-      }
-      if (status === 'failed') {
-        console.error('Transaction refresh failed.');
-        process.exit(1);
-      }
-      if (i === MAX_ATTEMPTS - 1) {
-        console.error('Refresh timed out after 60s.');
-        process.exit(1);
-      }
-    } catch (err) {
-      console.error('Poll error:', err.message);
-      process.exit(1);
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-
-  // Step C: List transactions with pagination
-  console.log('Fetching transactions...\n');
-  const transactions = [];
-  let startingAfter;
-
-  try {
-    while (true) {
-      const params = { account: fca_account_id, limit: 100 };
-      if (startingAfter) params.starting_after = startingAfter;
-
-      const page = await stripe.financialConnections.transactions.list(params);
-      transactions.push(...page.data);
-
-      if (!page.has_more) break;
-      startingAfter = page.data[page.data.length - 1].id;
-    }
-  } catch (err) {
-    console.error('Failed to list transactions:', err.message);
-    process.exit(1);
-  }
-
+function printTable(transactions) {
   if (transactions.length === 0) {
     console.log('No transactions found.');
     return;
   }
 
-  // Sort by transacted_at descending
-  transactions.sort((a, b) => b.transacted_at - a.transacted_at);
-
-  // Format and print table
-  const header = 'DATE        | AMOUNT     | STATUS  | DESCRIPTION';
+  const header = 'DATE        | AMOUNT     | STATUS  | ACCOUNT                      | DESCRIPTION';
   const divider = '-'.repeat(header.length);
   console.log(header);
   console.log(divider);
@@ -108,11 +51,113 @@ async function main() {
     const sign = tx.amount < 0 ? '-$' : '+$';
     const amount = `${sign}${dollars.toFixed(2)}`.padStart(10);
     const statusStr = (tx.status || '').padEnd(7);
+    const acctStr = (tx.account_label || tx.account_id || '').padEnd(28);
     const desc = tx.description || '';
-    console.log(`${date}  | ${amount} | ${statusStr} | ${desc}`);
+    console.log(`${date}  | ${amount} | ${statusStr} | ${acctStr} | ${desc}`);
   }
 
   console.log(`\n${transactions.length} transaction(s)`);
+}
+
+async function refreshAccount(accountId) {
+  await stripe.financialConnections.accounts.refresh(accountId, {
+    features: ['transactions'],
+  });
+
+  const MAX_ATTEMPTS = 30;
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const account = await stripe.financialConnections.accounts.retrieve(accountId);
+    const status = account.transaction_refresh?.status;
+
+    if (status === 'succeeded') return;
+    if (status === 'failed') throw new Error('Transaction refresh failed');
+    if (i === MAX_ATTEMPTS - 1) throw new Error('Refresh timed out after 60s');
+
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+}
+
+async function fetchTransactions(accountId) {
+  const txs = [];
+  let startingAfter;
+
+  while (true) {
+    const params = { account: accountId, limit: 100 };
+    if (startingAfter) params.starting_after = startingAfter;
+
+    const page = await stripe.financialConnections.transactions.list(params);
+    txs.push(...page.data);
+
+    if (!page.has_more) break;
+    startingAfter = page.data[page.data.length - 1].id;
+  }
+
+  return txs;
+}
+
+async function main() {
+  // Load linked accounts
+  let accountData;
+  try {
+    accountData = JSON.parse(fs.readFileSync(ACCOUNT_FILE, 'utf8'));
+  } catch {
+    console.error('No linked accounts found. Run `npm run link` first.');
+    process.exit(1);
+  }
+
+  const accounts = accountData.accounts || [];
+  if (accounts.length === 0) {
+    console.error('No linked accounts found. Run `npm run link` first.');
+    process.exit(1);
+  }
+
+  // Load existing local transactions
+  const existing = loadLocal();
+  const knownIds = new Set(existing.map((tx) => tx.id));
+  console.log(`Local store: ${existing.length} transaction(s)`);
+  console.log(`Linked accounts: ${accounts.length}\n`);
+
+  const newTxs = [];
+
+  for (const acct of accounts) {
+    const label = accountLabel(acct);
+    console.log(`[${label}] Refreshing...`);
+
+    try {
+      await refreshAccount(acct.id);
+    } catch (err) {
+      console.error(`[${label}] Refresh failed: ${err.message}, skipping.`);
+      continue;
+    }
+
+    console.log(`[${label}] Fetching transactions...`);
+
+    try {
+      const txs = await fetchTransactions(acct.id);
+      let added = 0;
+      for (const tx of txs) {
+        if (!knownIds.has(tx.id)) {
+          tx.account_id = acct.id;
+          tx.account_label = label;
+          newTxs.push(tx);
+          knownIds.add(tx.id);
+          added++;
+        }
+      }
+      console.log(`[${label}] ${added} new, ${txs.length} total from Stripe.`);
+    } catch (err) {
+      console.error(`[${label}] Fetch failed: ${err.message}, skipping.`);
+      continue;
+    }
+  }
+
+  // Append new transactions, sort, and save
+  const all = [...existing, ...newTxs];
+  all.sort((a, b) => b.transacted_at - a.transacted_at);
+  saveLocal(all);
+
+  console.log(`\n${newTxs.length} new transaction(s), ${all.length} total stored locally.\n`);
+  printTable(all);
 }
 
 main();

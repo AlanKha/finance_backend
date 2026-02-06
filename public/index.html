@@ -50,7 +50,12 @@
         const saveRes = await fetch('/save-account', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accountId: account.id }),
+          body: JSON.stringify({
+            accountId: account.id,
+            institution: account.institution_name || null,
+            displayName: account.display_name || null,
+            last4: account.last4 || null,
+          }),
         });
         const saveData = await saveRes.json();
         if (saveData.error) throw new Error(saveData.error);
