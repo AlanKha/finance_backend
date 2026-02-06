@@ -18,7 +18,7 @@
   <button id="connect">Connect Bank Account</button>
   <div id="status"></div>
 
-  <script src="https://js.stripe.com/v3/"></script>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <script>
     const btn = document.getElementById('connect');
     const status = document.getElementById('status');
@@ -32,44 +32,47 @@
       btn.disabled = true;
 
       try {
-        const configRes = await fetch('/config');
-        const { publishableKey } = await configRes.json();
-        const stripe = Stripe(publishableKey);
+        const tokenRes = await fetch('/create-link-token', { method: 'POST' });
+        const tokenData = await tokenRes.json();
+        if (tokenData.error) throw new Error(tokenData.error);
 
-        const sessionRes = await fetch('/create-session', { method: 'POST' });
-        const sessionData = await sessionRes.json();
-        if (sessionData.error) throw new Error(sessionData.error);
+        const handler = Plaid.create({
+          token: tokenData.link_token,
+          onSuccess: async (public_token, metadata) => {
+            try {
+              const exchangeRes = await fetch('/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  public_token,
+                  accounts: metadata.accounts,
+                }),
+              });
+              const exchangeData = await exchangeRes.json();
+              if (exchangeData.error) throw new Error(exchangeData.error);
 
-        const result = await stripe.collectFinancialConnectionsAccounts({
-          clientSecret: sessionData.clientSecret,
+              const acct = metadata.accounts[0];
+              const details = [
+                acct.name,
+                acct.mask ? `****${acct.mask}` : null,
+                acct.type,
+              ].filter(Boolean).join(' - ');
+
+              showStatus(`Linked: ${details}`, 'success');
+            } catch (err) {
+              showStatus(err.message, 'error');
+            }
+            btn.disabled = false;
+          },
+          onExit: (err) => {
+            if (err) showStatus(err.display_message || err.error_message, 'error');
+            btn.disabled = false;
+          },
         });
 
-        if (result.error) throw new Error(result.error.message);
-
-        const account = result.financialConnectionsSession.accounts[0];
-        const saveRes = await fetch('/save-account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accountId: account.id,
-            institution: account.institution_name || null,
-            displayName: account.display_name || null,
-            last4: account.last4 || null,
-          }),
-        });
-        const saveData = await saveRes.json();
-        if (saveData.error) throw new Error(saveData.error);
-
-        const details = [
-          account.institution_name,
-          account.display_name,
-          account.last4 ? `****${account.last4}` : null,
-        ].filter(Boolean).join(' - ');
-
-        showStatus(`Linked: ${details} (${account.id})`, 'success');
+        handler.open();
       } catch (err) {
         showStatus(err.message, 'error');
-      } finally {
         btn.disabled = false;
       }
     });

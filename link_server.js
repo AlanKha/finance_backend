@@ -2,18 +2,35 @@ require('dotenv').config();
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const Stripe = require('stripe');
+const { Configuration, PlaidApi, PlaidEnvironments } = require('plaid');
 
-const { stripe_secret_key, stripe_publishable_key } = process.env;
+const { plaid_client_id, plaid_sandbox_secret, plaid_production_secret, plaid_env } = process.env;
 
-if (!stripe_secret_key || !stripe_publishable_key) {
-  console.error('Missing stripe_secret_key or stripe_publishable_key in .env');
+if (!plaid_client_id) {
+  console.error('Missing plaid_client_id in .env');
   process.exit(1);
 }
 
-const stripe = new Stripe(stripe_secret_key);
-const app = express();
+const secret = plaid_env === 'production' ? plaid_production_secret : plaid_sandbox_secret;
 
+if (!secret) {
+  console.error(`Missing plaid_${plaid_env || 'sandbox'}_secret in .env`);
+  process.exit(1);
+}
+
+const config = new Configuration({
+  basePath: PlaidEnvironments[plaid_env || 'sandbox'],
+  baseOptions: {
+    headers: {
+      'PLAID-CLIENT-ID': plaid_client_id,
+      'PLAID-SECRET': secret,
+      'Plaid-Version': '2020-09-14',
+    },
+  },
+});
+const plaidClient = new PlaidApi(config);
+
+const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -33,75 +50,54 @@ function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-app.get('/config', (_req, res) => {
-  res.json({ publishableKey: stripe_publishable_key });
-});
-
-app.post('/create-session', async (_req, res) => {
+app.post('/create-link-token', async (_req, res) => {
   try {
-    let data = readData();
-
-    if (!data.customer_id) {
-      const customer = await stripe.customers.create();
-      data.customer_id = customer.id;
-      writeData(data);
-    }
-
-    const session = await stripe.financialConnections.sessions.create({
-      account_holder: { type: 'customer', customer: data.customer_id },
-      permissions: ['transactions'],
-      prefetch: ['transactions'],
+    const response = await plaidClient.linkTokenCreate({
+      user: { client_user_id: 'user-1' },
+      client_name: 'Finance Backend',
+      products: ['transactions'],
+      country_codes: ['US'],
+      language: 'en',
     });
-
-    res.json({ clientSecret: session.client_secret });
+    res.json({ link_token: response.data.link_token });
   } catch (err) {
-    console.error('Error creating session:', err);
-    const message = err.type === 'StripeAuthenticationError'
-      ? 'Invalid Stripe API key'
-      : err.message;
-    res.status(500).json({ error: message });
+    console.error('Error creating link token:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data?.error_message || err.message });
   }
 });
 
-app.post('/save-account', async (req, res) => {
+app.post('/exchange-token', async (req, res) => {
   try {
-    const { accountId, institution, displayName, last4 } = req.body;
-    if (!accountId) {
-      return res.status(400).json({ error: 'accountId is required' });
+    const { public_token, accounts: metadataAccounts } = req.body;
+    if (!public_token) {
+      return res.status(400).json({ error: 'public_token is required' });
     }
 
-    // Subscribe to ongoing transaction refreshes (best-effort — the session's
-    // prefetch already handled the initial data pull, and in test mode the
-    // account may be inactive which makes subscribe fail).
-    try {
-      await stripe.financialConnections.accounts.subscribe(accountId, {
-        features: ['transactions'],
-      });
-    } catch (subErr) {
-      console.warn('Subscribe skipped (account may be inactive):', subErr.message);
-    }
+    const exchangeResponse = await plaidClient.itemPublicTokenExchange({ public_token });
+    const { access_token, item_id } = exchangeResponse.data;
 
     const data = readData();
 
-    // Skip if this account is already linked
-    if (!data.accounts.some((a) => a.id === accountId)) {
+    for (const acct of (metadataAccounts || [])) {
+      if (data.accounts.some((a) => a.account_id === acct.id)) continue;
+
       data.accounts.push({
-        id: accountId,
-        institution: institution || null,
-        display_name: displayName || null,
-        last4: last4 || null,
+        access_token,
+        item_id,
+        account_id: acct.id,
+        name: acct.name || null,
+        mask: acct.mask || null,
+        type: acct.type || null,
+        subtype: acct.subtype || null,
         linked_at: new Date().toISOString(),
       });
-      writeData(data);
     }
 
-    res.json({ success: true, accountId });
+    writeData(data);
+    res.json({ success: true });
   } catch (err) {
-    console.error('Error saving account:', err);
-    const message = err.type === 'StripeInvalidRequestError'
-      ? `Stripe error: ${err.message}`
-      : err.message;
-    res.status(500).json({ error: message });
+    console.error('Error exchanging token:', err.response?.data || err.message);
+    res.status(500).json({ error: err.response?.data?.error_message || err.message });
   }
 });
 
