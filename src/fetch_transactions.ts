@@ -55,7 +55,11 @@ function saveLocal(transactions: StoredTransaction[]): void {
 
 function accountLabel(acct: LinkedAccount): string {
   return (
-    [acct.institution, acct.display_name, acct.last4 ? `****${acct.last4}` : null]
+    [
+      acct.institution,
+      acct.display_name,
+      acct.last4 ? `****${acct.last4}` : null,
+    ]
       .filter(Boolean)
       .join(" ") || acct.id
   );
@@ -119,8 +123,7 @@ async function fetchTransactions(
     };
     if (startingAfter) params.starting_after = startingAfter;
 
-    const page =
-      await stripe.financialConnections.transactions.list(params);
+    const page = await stripe.financialConnections.transactions.list(params);
     txs.push(...page.data);
 
     if (!page.has_more) break;

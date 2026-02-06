@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "link": "bun src/link_server.ts",
-    "fetch": "bun src/fetch_transactions.ts"
+    "fetch": "bun src/fetch_transactions.ts",
+    "clean": "bun src/clean_transactions.ts"
   },
   "dependencies": {
     "express": "^4.21.2",
