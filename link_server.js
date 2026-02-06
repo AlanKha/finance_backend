@@ -1,15 +1,18 @@
-require('dotenv').config();
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const Stripe = require('stripe');
+require("dotenv").config();
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const Stripe = require("stripe");
 
-const stripeEnv = process.env.stripe_env || 'sandbox';
+const stripeEnv = process.env.stripe_env || "sandbox";
 const stripe_secret_key = process.env[`stripe_${stripeEnv}_secret_key`];
-const stripe_publishable_key = process.env[`stripe_${stripeEnv}_publishable_key`];
+const stripe_publishable_key =
+  process.env[`stripe_${stripeEnv}_publishable_key`];
 
 if (!stripe_secret_key || !stripe_publishable_key) {
-  console.error(`Missing stripe_${stripeEnv}_secret_key or stripe_${stripeEnv}_publishable_key in .env`);
+  console.error(
+    `Missing stripe_${stripeEnv}_secret_key or stripe_${stripeEnv}_publishable_key in .env`,
+  );
   process.exit(1);
 }
 
@@ -18,14 +21,14 @@ const stripe = new Stripe(stripe_secret_key);
 const app = express();
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, "public")));
 
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILE = path.join(DATA_DIR, 'linked_account.json');
+const DATA_DIR = path.join(__dirname, "data");
+const DATA_FILE = path.join(DATA_DIR, "linked_account.json");
 
 function readData() {
   try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
   } catch {
     return { accounts: [] };
   }
@@ -36,11 +39,11 @@ function writeData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-app.get('/config', (_req, res) => {
+app.get("/config", (_req, res) => {
   res.json({ publishableKey: stripe_publishable_key });
 });
 
-app.post('/create-session', async (_req, res) => {
+app.post("/create-session", async (_req, res) => {
   try {
     let data = readData();
 
@@ -51,26 +54,27 @@ app.post('/create-session', async (_req, res) => {
     }
 
     const session = await stripe.financialConnections.sessions.create({
-      account_holder: { type: 'customer', customer: data.customer_id },
-      permissions: ['transactions'],
-      prefetch: ['transactions'],
+      account_holder: { type: "customer", customer: data.customer_id },
+      permissions: ["transactions"],
+      prefetch: ["transactions"],
     });
 
     res.json({ clientSecret: session.client_secret });
   } catch (err) {
-    console.error('Error creating session:', err);
-    const message = err.type === 'StripeAuthenticationError'
-      ? 'Invalid Stripe API key'
-      : err.message;
+    console.error("Error creating session:", err);
+    const message =
+      err.type === "StripeAuthenticationError"
+        ? "Invalid Stripe API key"
+        : err.message;
     res.status(500).json({ error: message });
   }
 });
 
-app.post('/save-account', async (req, res) => {
+app.post("/save-account", async (req, res) => {
   try {
     const { accountId, institution, displayName, last4 } = req.body;
     if (!accountId) {
-      return res.status(400).json({ error: 'accountId is required' });
+      return res.status(400).json({ error: "accountId is required" });
     }
 
     // Subscribe to ongoing transaction refreshes (best-effort — the session's
@@ -78,10 +82,13 @@ app.post('/save-account', async (req, res) => {
     // account may be inactive which makes subscribe fail).
     try {
       await stripe.financialConnections.accounts.subscribe(accountId, {
-        features: ['transactions'],
+        features: ["transactions"],
       });
     } catch (subErr) {
-      console.warn('Subscribe skipped (account may be inactive):', subErr.message);
+      console.warn(
+        "Subscribe skipped (account may be inactive):",
+        subErr.message,
+      );
     }
 
     const data = readData();
@@ -100,14 +107,15 @@ app.post('/save-account', async (req, res) => {
 
     res.json({ success: true, accountId });
   } catch (err) {
-    console.error('Error saving account:', err);
-    const message = err.type === 'StripeInvalidRequestError'
-      ? `Stripe error: ${err.message}`
-      : err.message;
+    console.error("Error saving account:", err);
+    const message =
+      err.type === "StripeInvalidRequestError"
+        ? `Stripe error: ${err.message}`
+        : err.message;
     res.status(500).json({ error: message });
   }
 });
 
 app.listen(3000, () => {
-  console.log('Link server running at http://localhost:3000');
+  console.log("Link server running at http://localhost:3000");
 });

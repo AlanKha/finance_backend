@@ -98,26 +98,51 @@ async function fetchTransactions(accountId) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const fetchAll = args.includes('--all');
+  const displayName = args.filter((a) => a !== '--all').join(' ').trim();
+
+  if (!fetchAll && !displayName) {
+    console.error('Usage: bun run fetch <display_name>');
+    console.error('       bun run fetch --all');
+    process.exit(1);
+  }
+
   // Load linked accounts
   let accountData;
   try {
     accountData = JSON.parse(fs.readFileSync(ACCOUNT_FILE, 'utf8'));
   } catch {
-    console.error('No linked accounts found. Run `npm run link` first.');
+    console.error('No linked accounts found. Run `bun run link` first.');
     process.exit(1);
   }
 
-  const accounts = accountData.accounts || [];
+  let accounts = accountData.accounts || [];
   if (accounts.length === 0) {
-    console.error('No linked accounts found. Run `npm run link` first.');
+    console.error('No linked accounts found. Run `bun run link` first.');
     process.exit(1);
+  }
+
+  if (displayName) {
+    const match = accounts.filter(
+      (a) => a.display_name && a.display_name.toLowerCase() === displayName.toLowerCase()
+    );
+    if (match.length === 0) {
+      console.error(`No account found with display_name "${displayName}".`);
+      console.error('Available accounts:');
+      for (const a of accounts) {
+        console.error(`  - ${a.display_name || '(no name)'} [${accountLabel(a)}]`);
+      }
+      process.exit(1);
+    }
+    accounts = match;
   }
 
   // Load existing local transactions
   const existing = loadLocal();
   const knownIds = new Set(existing.map((tx) => tx.id));
   console.log(`Local store: ${existing.length} transaction(s)`);
-  console.log(`Linked accounts: ${accounts.length}\n`);
+  console.log(`Fetching ${accounts.length} account(s)\n`);
 
   const newTxs = [];
 
@@ -159,7 +184,13 @@ async function main() {
   saveLocal(all);
 
   console.log(`\n${newTxs.length} new transaction(s), ${all.length} total stored locally.\n`);
-  printTable(all);
+
+  if (displayName) {
+    const accountIds = new Set(accounts.map((a) => a.id));
+    printTable(all.filter((tx) => accountIds.has(tx.account_id)));
+  } else {
+    printTable(all);
+  }
 }
 
 main();
