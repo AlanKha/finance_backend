@@ -1,19 +1,24 @@
 # finance_backend
 
-Pulls bank transactions via Stripe Financial Connections. Two modes: a one-time local server to link bank accounts through Stripe's modal, and a CLI script to refresh and dump transactions on demand. Supports multiple accounts -- each transaction is tagged with the account it came from.
+Pulls bank transactions via Stripe Financial Connections, cleans them for personal finance tracking, and generates weekly spending breakdowns by category.
 
 Designed to be run weekly by an automated agent (e.g. OpenClaw) after the initial account link.
 
 ## How it works
 
-1. **`link_server.js`** starts an Express server on port 3000 that serves a single-page frontend. Clicking "Connect Bank Account" opens Stripe's Financial Connections modal, which walks you through bank login. On success, the server creates a Stripe Customer (if one doesn't exist) and appends the linked account (with institution name, display name, last4) to `data/linked_account.json`. You can link multiple accounts by clicking the button again.
+1. **`link_server.ts`** starts an Express server on port 3000 that serves a single-page frontend. Clicking "Connect Bank Account" opens Stripe's Financial Connections modal, which walks you through bank login. On success, the server creates a Stripe Customer (if one doesn't exist) and appends the linked account (with institution name, display name, last4) to `data/linked_account.json`. You can link multiple accounts by clicking the button again.
 
-2. **`fetch_transactions.js`** loops over every linked account, refreshes transaction data from Stripe, and fetches all transactions. Only new transactions (by ID) are appended to the local store at `data/transactions.json`. Each transaction is tagged with `account_id` and `account_label` so you can tell which card/account it came from. The full history is printed as a table sorted by date descending.
+2. **`fetch_transactions.ts`** loops over every linked account, refreshes transaction data from Stripe, and fetches all transactions. Only new transactions (by ID) are appended to the local store at `data/transactions.json`. Each transaction is tagged with `account_id` and `account_label` so you can tell which card/account it came from.
+
+3. **`clean_transactions.ts`** reads the raw transaction store, strips irrelevant Stripe metadata, normalizes dates, and categorizes each transaction by matching descriptions against regex rules in `category_rules.ts`. Outputs:
+   - `data/transactions_clean.json` — all cleaned transactions
+   - `data/category_summary.json` — totals per category
+   - `data/weekly/<date>/` — per-week `transactions_clean.json` and `category_summary.json`, where `<date>` is the Sunday start of that week
 
 ## Setup
 
 ```bash
-npm install
+bun install
 ```
 
 Create a `.env` file with your Stripe keys (lowercase):
@@ -28,7 +33,7 @@ stripe_secret_key=sk_test_...
 ### Link bank accounts
 
 ```bash
-npm run link
+bun run link
 ```
 
 Open <http://localhost:3000>, click "Connect Bank Account", complete the flow. Repeat for each account you want to link. Ctrl+C when done. Accounts are stored in `data/linked_account.json`.
@@ -36,52 +41,64 @@ Open <http://localhost:3000>, click "Connect Bank Account", complete the flow. R
 ### Fetch transactions
 
 ```bash
-npm run fetch
+bun run fetch --all
+bun run fetch <display_name>
+```
+
+Refreshes each linked account from Stripe, appends new transactions to `data/transactions.json`, and prints a table sorted by date descending.
+
+### Clean & categorize
+
+```bash
+bun run clean
 ```
 
 Output:
 
 ```bash
-Local store: 0 transaction(s)
-Linked accounts: 2
+Cleaned 209 transaction(s)
+Dropped fields: object, account, livemode, updated, account_id, transaction_refresh, transacted_at
 
-[Chase Checking ****1234] Refreshing...
-[Chase Checking ****1234] Fetching transactions...
-[Chase Checking ****1234] 15 new, 15 total from Stripe.
-[Amex Platinum ****5678] Refreshing...
-[Amex Platinum ****5678] Fetching transactions...
-[Amex Platinum ****5678] 8 new, 8 total from Stripe.
+Category breakdown:
+  Dining: 105
+  Transfer: 18
+  Transit: 17
+  Superstore: 14
+  ...
 
-23 new transaction(s), 23 total stored locally.
-
-DATE        | AMOUNT     | STATUS  | ACCOUNT                      | DESCRIPTION
----------------------------------------------------------------------------------
-2026-02-05  |    -$12.50 | posted  | Chase Checking ****1234      | WHOLE FOODS MKT
-2026-02-04  |   +$500.00 | posted  | Chase Checking ****1234      | DIRECT DEPOSIT
-2026-02-03  |    -$45.00 | posted  | Amex Platinum ****5678       | AMAZON.COM
-
-23 transaction(s)
+Weekly breakdowns: 13 week(s) in data/weekly/
+  2025-11-02/ (1 transactions)
+  2025-11-09/ (1 transactions)
+  ...
 ```
 
-### Weekly automation (OpenClaw)
+Categories are defined in `src/category_rules.ts`. Unmatched descriptions are printed at the end so you can add new rules.
 
-After the initial link, the only command needed on a schedule is:
+### Weekly automation
+
+After the initial link, the only commands needed on a schedule are:
 
 ```bash
-node fetch_transactions.js
+bun run fetch --all
+bun run clean
 ```
 
-It reads credentials from `.env` and linked accounts from `data/linked_account.json`, refreshes each account, appends any new transactions to the local store at `data/transactions.json`, and prints them to stdout. If one account fails to refresh, it logs the error and continues with the rest. Exit code 0 on success, 1 if no accounts are linked.
-
-If an account becomes stale or disconnected, re-run `npm run link` to re-link.
+If an account becomes stale or disconnected, re-run `bun run link` to re-link.
 
 ## File structure
 
 ```bash
-.env                         # Stripe API keys (gitignored)
-link_server.js               # Express server for account linking
-public/index.html            # Frontend with Stripe.js modal
-fetch_transactions.js        # CLI script to refresh + print transactions
-data/linked_account.json     # Linked accounts list (gitignored)
-data/transactions.json       # Local transaction store (gitignored)
+.env                                    # Stripe API keys (gitignored)
+src/link_server.ts                      # Express server for account linking
+src/fetch_transactions.ts               # CLI script to refresh + fetch transactions
+src/clean_transactions.ts               # Cleans, categorizes, and generates summaries
+src/category_rules.ts                   # Regex-to-category mapping
+public/index.html                       # Frontend with Stripe.js modal
+data/linked_account.json                # Linked accounts list (gitignored)
+data/transactions.json                  # Raw transaction store (gitignored)
+data/transactions_clean.json            # Cleaned transactions (gitignored)
+data/category_summary.json              # Category totals (gitignored)
+data/weekly/<date>/                     # Per-week breakdowns (gitignored)
+    transactions_clean.json
+    category_summary.json
 ```
