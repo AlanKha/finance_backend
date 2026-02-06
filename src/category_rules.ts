@@ -35,6 +35,54 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   [/DOORDASH/i, "Dining"],
   [/UBER EATS/i, "Dining"],
   [/GRUBHUB/i, "Dining"],
+  [/^TST\*/i, "Dining"],
+  [/^SNACK\*/i, "Dining"],
+  [/STARBUCKS/i, "Dining"],
+  [/RAISING CANE/i, "Dining"],
+  [/DAVE'?S?\s*HOT\s*CHICKEN/i, "Dining"],
+  [/PIZZA/i, "Dining"],
+  [/TAQUERIA/i, "Dining"],
+  [/SUSHI/i, "Dining"],
+  [/\bTHAI\b/i, "Dining"],
+  [/\bDELI\b/i, "Dining"],
+  [/BAGEL/i, "Dining"],
+  [/ICE CREAM/i, "Dining"],
+  [/GELATO/i, "Dining"],
+  [/NOODLE/i, "Dining"],
+  [/WAFFLE/i, "Dining"],
+  [/KITCHEN/i, "Dining"],
+  [/BAR & GRILL/i, "Dining"],
+  [/ROASTER/i, "Dining"],
+  [/\bMATCHA\b/i, "Dining"],
+  [/JAMBA JUICE/i, "Dining"],
+  [/\bBOBA\b/i, "Dining"],
+  [/DONUT/i, "Dining"],
+  [/ARAMARK/i, "Dining"],
+  [/CHICKEN/i, "Dining"],
+  [/MONTY'?S RED SAUCE/i, "Dining"],
+  [/PHIN CAPH/i, "Dining"],
+  [/FLEMINGS?\d/i, "Dining"],
+  [/A DOPO/i, "Dining"],
+  [/COOL BEANS/i, "Dining"],
+  [/OLD CITY JAVA/i, "Dining"],
+  [/WATCHHOUSE/i, "Dining"],
+  [/JIANG NAN/i, "Dining"],
+  [/LA CABRA/i, "Dining"],
+  [/VAN LEEUWEN/i, "Dining"],
+  [/VINNIE'?S/i, "Dining"],
+  [/LOS TACOS/i, "Dining"],
+  [/OOH LALA/i, "Dining"],
+  [/YUM TRA/i, "Dining"],
+  [/CHICHA SAN CHEN/i, "Dining"],
+  [/SUPER TASTE/i, "Dining"],
+  [/BRENZ/i, "Dining"],
+  [/AROMA INDIAN/i, "Dining"],
+  [/SQ \*REGULAR NYC/i, "Dining"],
+  [/SQ \*NO PREFERENCE/i, "Dining"],
+  [/SQ \*JACKS\b/i, "Dining"],
+  [/RUBYS EAST VILLAGE/i, "Dining"],
+  [/LIBERTY BAGELS/i, "Dining"],
+  [/PIZZER/i, "Dining"],
 
   // Gas / Fuel
   [/SHELL OIL/i, "Gas"],
@@ -45,10 +93,12 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   [/WAWA/i, "Gas"],
   [/SPEEDWAY/i, "Gas"],
   [/7-ELEVEN/i, "Gas"],
+  [/BUC-?EE/i, "Gas"],
 
   // Rideshare / Transit
   [/UBER(?! EATS)/i, "Transit"],
   [/LYFT/i, "Transit"],
+  [/PARKING/i, "Transit"],
 
   // Subscriptions / Streaming
   [/NETFLIX/i, "Subscription"],
@@ -60,6 +110,8 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   [/AMAZON PRIME/i, "Subscription"],
   [/HBO MAX/i, "Subscription"],
   [/YOUTUBE PREMIUM/i, "Subscription"],
+  [/CLAUDE\.AI/i, "Subscription"],
+  [/WMT PLUS/i, "Subscription"],
 
   // Shopping
   [/AMAZON\.COM/i, "Shopping"],
@@ -68,6 +120,11 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   [/HOME DEPOT/i, "Shopping"],
   [/LOWE'?S/i, "Shopping"],
   [/IKEA/i, "Shopping"],
+  [/VOLSHOP/i, "Shopping"],
+  [/GOODWILL/i, "Shopping"],
+  [/OFFICE DEPOT/i, "Shopping"],
+  [/NORDSTROM/i, "Shopping"],
+  [/SAMS PARTY/i, "Shopping"],
 
   // Utilities
   [/COMCAST/i, "Utilities"],
@@ -93,9 +150,14 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   [/HOTEL/i, "Travel"],
   [/MARRIOTT/i, "Travel"],
   [/HILTON/i, "Travel"],
+  [/AMERICAN 00\d/i, "Travel"],
+  [/ALLEGIANT|ALLEGNT/i, "Travel"],
+  [/\bAA KIOSK/i, "Travel"],
+  [/HOMEWOOD SUITES/i, "Travel"],
 
   // Transfer / Payment
   [/VENMO/i, "Transfer"],
+  [/ONLINE ACH PAYMENT/i, "Transfer"],
   [/REWARD/i, "Transfer"],
   [/PYMT/i, "Transfer"],
   [/ZELLE/i, "Transfer"],
@@ -105,4 +167,15 @@ export const CATEGORY_RULES: [RegExp, string][] = [
   // Entertainment
   [/TEBEX/i, "Entertainment"],
   [/MODERN WARRIORS/i, "Entertainment"],
+  [/CLIMBING/i, "Entertainment"],
+  [/PORTLANDROCK/i, "Entertainment"],
+  [/MUSEUM/i, "Entertainment"],
+  [/UTKATHLETICS/i, "Entertainment"],
+
+  // Rent / Housing
+  [/BILT.*RENT/i, "Rent"],
+  [/BILTPROTECT/i, "Rent"],
+
+  // Fees
+  [/LATE FEE/i, "Fee"],
 ];
